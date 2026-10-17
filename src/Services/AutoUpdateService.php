@@ -121,9 +121,12 @@ class AutoUpdateService
     public function tickServer(Server $server): void
     {
         $state = $this->store->read($server);
+
         if (!($state['auto']['enabled'] ?? false)) {
+            $this->watchDiscordUpdates($server, $state);
             return;
         }
+
 
         match ($state['run']['phase'] ?? 'idle') {
             'warning' => $this->duringWarning($server, $state),
@@ -135,7 +138,110 @@ class AutoUpdateService
         };
     }
 
+    private function notifyDiscord(
+        Server $server,
+        string $event,
+        string $title,
+        string $description
+    ): void {
+        app(DiscordNotifier::class)->send(
+            $server,
+            $event,
+            $title,
+            $description
+        );
+    }
+
+    private function discordModList(array $mods): string
+    {
+        $lines = [];
+
+        foreach ($mods as $mod) {
+            $id = (string) ($mod['id'] ?? '');
+
+            if (!ctype_digit($id)) {
+                continue;
+            }
+
+            $name = (string) ($mod['name'] ?? $id);
+            $name = str_replace(['[', ']'], '', $name);
+
+            $timestamp = (int) ($mod['steam_at'] ?? 0);
+
+            $link = "[{$name}](https://steamcommunity.com/sharedfiles/filedetails/?id={$id})";
+
+            if ($timestamp > 0) {
+                $link .= " — Updated <t:{$timestamp}:F>";
+            }
+
+            $lines[] = $link;
+        }
+
+        return $lines
+            ? implode("\n", $lines)
+            : 'A Project Zomboid update was detected.';
+    }
+
     // ----------------------------------------------------------------- phases
+    private function watchDiscordUpdates(
+        Server $server,
+        array $state
+    ): void {
+        $settings = $state['discord'] ?? [];
+
+        if (
+            !($settings['enabled'] ?? false) ||
+            !($settings['updates'] ?? false)
+        ) {
+            return;
+        }
+
+        $now = now()->timestamp;
+        $last = $state['discord_run'] ?? [];
+
+        if ($now < (int) ($last['next_check_at'] ?? 0)) {
+            return;
+        }
+
+        $found = $this->detect($server, $state['auto']);
+
+        $mods = array_values($found['stale'] ?? []);
+
+        $signature = $mods
+            ? hash('sha256', json_encode(
+                array_map(
+                    fn ($mod) => [
+                        $mod['id'] ?? '',
+                        $mod['steam_at'] ?? 0
+                    ],
+                    $mods
+                )
+            ))
+            : '';
+
+        $previous = $last['last_signature'] ?? '';
+
+        $last['next_check_at'] = $now +
+            max(60, $state['auto']['check_minutes'] * 60);
+
+        if ($signature !== $previous) {
+            if ($signature !== '') {
+                $this->notifyDiscord(
+                    $server,
+                    'updates',
+                    'Mod Update Available',
+                    $this->discordModList($mods)
+                );
+            }
+
+            $last['last_signature'] = $signature;
+        }
+
+        $state['discord_run'] = $last;
+
+        $this->store->write($server, $state);
+    }
+
 
     /** @param array<string,mixed> $state */
     private function whenIdle(Server $server, array $state): void
@@ -208,6 +314,13 @@ class AutoUpdateService
         }
 
         $this->save($server, $state, $run);
+        $this->notifyDiscord(
+            $server,
+            'updates',
+            'Mod Update Detected',
+            $this->discordModList($found['stale'] ?? [])
+        );
+
     }
 
     /** @param array<string,mixed> $state */
@@ -281,6 +394,13 @@ class AutoUpdateService
         $this->save($server, $state, $run);
 
         $this->power->setServer($server)->send('restart');
+        $this->notifyDiscord(
+            $server,
+            'restarting',
+            'Server Restart Requested',
+            'Restarting to apply a ' . $run['reason'] . ' update.'
+        );
+
     }
 
     /**
@@ -467,6 +587,16 @@ class AutoUpdateService
             'note' => 'Update applied and verified: ' . $run['reason'] . '.',
             'verified_at' => $now,
         ]);
+        $this->notifyDiscord(
+            $server,
+            'online',
+            'Server Online - Updates Verified',
+            "Project Zomboid startup and updates verified.\n\n"
+                . $this->discordModList(
+                    $run['stale_before'] ?? []
+                )
+        );
+
     }
 
     /**
@@ -492,6 +622,13 @@ class AutoUpdateService
             'failed_at' => now()->timestamp,
             'last_restart_at' => $state['run']['last_restart_at'] ?? 0,
         ]);
+        $this->notifyDiscord(
+            $server,
+            'failed',
+            'Automatic Update Failed',
+            $why
+        );
+
     }
 
     // ----------------------------------------------------------------- manual
@@ -560,6 +697,13 @@ class AutoUpdateService
             'outcome' => 'unverified',
         ]);
         $this->store->write($server, $state);
+
+        $this->notifyDiscord(
+            $server,
+            'restarting',
+            'Manual Server Restart Requested',
+            $why
+        );
 
         return ['restarted' => true, 'wanted_backup' => $wanted, 'backup_id' => $backupId, 'backup_done' => $settled];
     }

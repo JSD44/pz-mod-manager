@@ -19,6 +19,8 @@ use WildBrianNL\PZModManager\Services\PowerService;
 use WildBrianNL\PZModManager\Services\StateStore;
 use WildBrianNL\PZModManager\Services\SteamClient;
 use Illuminate\Support\Facades\Cache;
+use WildBrianNL\PZModManager\Services\DiscordNotifier;
+use Illuminate\Support\Facades\Crypt;
 
 class ManageMods extends Page
 {
@@ -68,6 +70,12 @@ class ManageMods extends Page
      * @var array<string,mixed>
      */
     public array $auto = [];
+
+    public array $discord = [];
+
+    public string $discordWebhookUrl = '';
+
+    public bool $discordWebhookConfigured = false;
 
     /**
      * Read-only picture of what the scheduler is doing: phase, note, timings.
@@ -187,6 +195,7 @@ class ManageMods extends Page
     {
         abort_unless(user()?->can(SubuserPermission::FileRead, $this->getServer()), 403);
         $this->load();
+        $this->loadDiscord();
     }
 
     // ------------------------------------------------------------ state load
@@ -1445,6 +1454,131 @@ class ManageMods extends Page
         $this->load();
         Notification::make()->title(trans('pzmm::messages.notify.refreshed'))->success()->send();
     }
+private function loadDiscord(): void
+{
+    $settings = app(StateStore::class)
+        ->read($this->getServer())['discord'];
+
+    $this->discordWebhookConfigured =
+        ($settings['webhook_encrypted'] ?? '') !== '';
+
+    unset($settings['webhook_encrypted']);
+
+    $this->discord = $settings;
+    $this->discordWebhookUrl = '';
+}
+
+public function saveDiscord(): void
+{
+    abort_unless($this->canWrite(), 403);
+
+    $server = $this->getServer();
+    $url = trim($this->discordWebhookUrl);
+
+    if ($url !== '' && !DiscordNotifier::validWebhookUrl($url)) {
+        Notification::make()
+            ->title('Invalid Discord webhook URL')
+            ->danger()
+            ->send();
+
+        return;
+    }
+
+    $store = app(StateStore::class);
+    $state = $store->read($server);
+    $settings = $state['discord'];
+
+    foreach (
+        ['enabled', 'updates', 'restarting', 'online', 'failed']
+        as $key
+    ) {
+        $settings[$key] = (bool) (
+            $this->discord[$key] ?? false
+        );
+    }
+
+    $settings['name'] = mb_substr(
+        trim((string) ($this->discord['name'] ?? '')),
+        0,
+        80
+    ) ?: 'PZ Mod Manager';
+
+    if ($url !== '') {
+        $settings['webhook_encrypted'] =
+            Crypt::encryptString($url);
+    }
+
+    if (
+        $settings['enabled'] &&
+        empty($settings['webhook_encrypted'])
+    ) {
+        Notification::make()
+            ->title('Configure a webhook URL first')
+            ->warning()
+            ->send();
+
+        return;
+    }
+
+    $state['discord'] = $settings;
+
+    $store->write($server, $state);
+
+    $this->loadDiscord();
+
+    Notification::make()
+        ->title('Discord settings saved')
+        ->success()
+        ->send();
+}
+
+public function testDiscord(): void
+{
+    abort_unless($this->canWrite(), 403);
+
+    $success = app(DiscordNotifier::class)->send(
+        $this->getServer(),
+        'online',
+        'Discord Webhook Test',
+        'Webhook notifications are working!',
+        true
+    );
+
+    $notification = Notification::make()->title(
+        $success
+            ? 'Discord webhook delivered'
+            : 'Discord webhook failed'
+    );
+
+    if ($success) {
+        $notification->success();
+    } else {
+        $notification->danger();
+    }
+
+    $notification->send();
+}
+
+public function clearDiscordWebhook(): void
+{
+    abort_unless($this->canWrite(), 403);
+
+    $server = $this->getServer();
+    $store = app(StateStore::class);
+    $state = $store->read($server);
+
+    $state['discord']['webhook_encrypted'] = '';
+    $state['discord']['enabled'] = false;
+
+    $store->write($server, $state);
+
+    $this->loadDiscord();
+
+    Notification::make()
+        ->title('Discord webhook removed')
+        ->success()
+        ->send();
+}
 
     // ----------------------------------------------------- auto-update panel
 

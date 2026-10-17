@@ -60,6 +60,16 @@ class StateStore
         'msg_back' => 'Update applied. Welcome back.',
     ];
 
+    public const DISCORD_DEFAULTS = [
+        'enabled' => false,
+        'name' => 'PZ Mod Manager',
+        'webhook_encrypted' => '',
+        'updates' => true,
+        'restarting' => true,
+        'online' => true,
+        'failed' => true,
+    ];
+
     private const AUTO_MIN = [
         'check_minutes' => 1,
         'warn_minutes' => 0,
@@ -101,6 +111,8 @@ class StateStore
             'pending' => is_array($data['pending'] ?? null) ? $data['pending'] : [],
             'locks' => $locks,
             'auto' => $this->auto(is_array($data['auto'] ?? null) ? $data['auto'] : []),
+            'discord' => $this->discord(is_array($data['discord'] ?? null) ? $data['discord'] : []),
+            'discord_run' => is_array($data['discord_run'] ?? null) ? $data['discord_run'] : [],
             'run' => is_array($data['run'] ?? null) ? $data['run'] : [],
             'history' => $this->history(is_array($data['history'] ?? null) ? $data['history'] : []),
         ];
@@ -217,6 +229,33 @@ class StateStore
 
         return $out;
     }
+    private function discord(array $stored): array
+    {
+        $settings = self::DISCORD_DEFAULTS;
+
+        foreach (
+            ['enabled', 'updates', 'restarting', 'online', 'failed']
+            as $key
+        ) {
+            $settings[$key] = (bool) (
+                $stored[$key] ?? $settings[$key]
+            );
+        }
+
+        $settings['name'] = mb_substr(
+            trim((string) ($stored['name'] ?? 'PZ Mod Manager')),
+            0,
+            80
+        ) ?: 'PZ Mod Manager';
+
+        $settings['webhook_encrypted'] = mb_substr(
+            (string) ($stored['webhook_encrypted'] ?? ''),
+            0,
+            2048
+        );
+
+        return $settings;
+    }
 
     /**
      * Both keys are always written from the passed state, so a caller that only
@@ -238,6 +277,8 @@ class StateStore
                     // 99999 while the plugin quietly uses 60 is a file that lies
                     // to whoever opens it.
                     'auto' => $this->auto($state['auto'] ?? []),
+                    'discord' => $this->discord($state['discord'] ?? []),
+                    'discord_run' => $state['discord_run'] ?? [],
                     'run' => $state['run'] ?? [],
                     'history' => $this->history($state['history'] ?? []),
                 ], JSON_PRETTY_PRINT)

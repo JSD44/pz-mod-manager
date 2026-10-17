@@ -441,7 +441,134 @@
                 @endif
         </div>
     </details>
+{{-- Discord Webhook Settings --}}
+<h2 class="pzmm-sec">Discord Webhook</h2>
 
+<details class="fi-section" wire:ignore.self>
+    <summary class="pzmm-sum" style="padding:1rem;cursor:pointer;">
+        Discord Notifications
+    </summary>
+
+    <div style="padding:1rem;display:grid;gap:1rem;">
+
+        {{-- Enable notifications --}}
+        <label>
+            <input
+                type="checkbox"
+                wire:model="discord.enabled"
+                @disabled(!$this->canWrite())
+            />
+            Enable Discord Notifications
+        </label>
+
+        {{-- Display name --}}
+        <label>
+            Discord Webhook Display Name
+
+            <input
+                type="text"
+                class="pzmm-field"
+                style="width:100%;"
+                maxlength="80"
+                placeholder="PZ Mod Manager"
+                wire:model="discord.name"
+                @disabled(!$this->canWrite())
+            />
+        </label>
+
+        {{-- Webhook URL --}}
+        <label>
+            Discord Webhook URL
+
+            <input
+                type="password"
+                class="pzmm-field"
+                style="width:100%;"
+                autocomplete="new-password"
+                placeholder="https://discord.com/api/webhooks/..."
+                wire:model="discordWebhookUrl"
+                @disabled(!$this->canWrite())
+            />
+        </label>
+
+        @if ($discordWebhookConfigured)
+            <p>Webhook configured. Leave URL blank to keep it.</p>
+        @endif
+
+        <strong>Notification Events</strong>
+
+        <label>
+            <input
+                type="checkbox"
+                wire:model="discord.updates"
+                @disabled(!$this->canWrite())
+            />
+            Mod Updates Detected
+        </label>
+
+        <label>
+            <input
+                type="checkbox"
+                wire:model="discord.restarting"
+                @disabled(!$this->canWrite())
+            />
+            Server Restarting
+        </label>
+
+        <label>
+            <input
+                type="checkbox"
+                wire:model="discord.online"
+                @disabled(!$this->canWrite())
+            />
+            Server Online / Updates Verified
+        </label>
+
+        <label>
+            <input
+                type="checkbox"
+                wire:model="discord.failed"
+                @disabled(!$this->canWrite())
+            />
+            Update / Restart Failures
+        </label>
+
+        @if ($this->canWrite())
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+
+                <x-filament::button
+                    size="xs"
+                    wire:click="saveDiscord"
+                    wire:loading.attr="disabled"
+                    wire:target="saveDiscord"
+                >
+                    Save Webhook
+                </x-filament::button>
+
+                <x-filament::button
+                    size="xs"
+                    color="gray"
+                    wire:click="testDiscord"
+                    wire:loading.attr="disabled"
+                    wire:target="testDiscord"
+                >
+                    Test Webhook
+                </x-filament::button>
+
+                @if ($discordWebhookConfigured)
+                    <x-filament::button
+                        size="xs"
+                        color="danger"
+                        wire:click="clearDiscordWebhook"
+                    >
+                        Remove Webhook
+                    </x-filament::button>
+                @endif
+
+            </div>
+        @endif
+    </div>
+</details>
     <h2 class="pzmm-sec">{{ trans('pzmm::messages.title') }}</h2>
     {{-- Stats. Number first, label under it, no icon: four icons in a row read
          as decoration and pushed the numbers into a column too narrow to scan. --}}

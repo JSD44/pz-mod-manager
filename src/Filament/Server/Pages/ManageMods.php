@@ -1503,6 +1503,25 @@ public function saveDiscord(): void
         80
     ) ?: 'PZ Mod Manager';
 
+    $avatarUrl = trim(
+        (string) ($this->discord['avatar_url'] ?? '')
+    );
+
+    if (
+        $avatarUrl !== '' &&
+        (!filter_var($avatarUrl, FILTER_VALIDATE_URL)
+            || parse_url($avatarUrl, PHP_URL_SCHEME) !== 'https')
+    ) {
+        Notification::make()
+            ->title('Avatar URL must be a valid HTTPS URL')
+            ->danger()
+            ->send();
+
+        return;
+    }
+
+    $settings['avatar_url'] = mb_substr($avatarUrl, 0, 2048);
+
     if ($url !== '') {
         $settings['webhook_encrypted'] =
             Crypt::encryptString($url);

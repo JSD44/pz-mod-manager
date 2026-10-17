@@ -76,6 +76,7 @@ class DiscordNotifier
                         0,
                         80
                     ),
+                    'avatar_url' => $settings['avatar_url'] ?: null,
                     'allowed_mentions' => ['parse' => []],
                     'embeds' => [[
                         'title' => mb_substr($title, 0, 256),

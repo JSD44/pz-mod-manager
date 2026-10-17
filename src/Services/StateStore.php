@@ -63,6 +63,7 @@ class StateStore
     public const DISCORD_DEFAULTS = [
         'enabled' => false,
         'name' => 'PZ Mod Manager',
+        'avatar_url' => '',
         'webhook_encrypted' => '',
         'updates' => true,
         'restarting' => true,
@@ -247,7 +248,11 @@ class StateStore
             0,
             80
         ) ?: 'PZ Mod Manager';
-
+        $settings['avatar_url'] = mb_substr(
+            trim((string) ($stored['avatar_url'] ?? '')),
+            0,
+            2048
+        );
         $settings['webhook_encrypted'] = mb_substr(
             (string) ($stored['webhook_encrypted'] ?? ''),
             0,

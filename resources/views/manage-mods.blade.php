@@ -475,7 +475,25 @@
                 @disabled(!$this->canWrite())
             />
         </label>
+        {{-- Discord Webhook Avatar URL --}}
+        <label>
+            Discord Webhook Avatar URL
 
+            <input
+                type="url"
+                class="pzmm-field"
+                style="width:100%;"
+                maxlength="2048"
+                placeholder="https://example.com/avatar.png"
+                wire:model="discord.avatar_url"
+                @disabled(!$this->canWrite())
+            />
+
+            <small>
+                Optional. Direct HTTPS link to a PNG, JPG, or GIF image.
+                Leave blank to use the webhook's default avatar.
+            </small>
+        </label>
         {{-- Webhook URL --}}
         <label>
             Discord Webhook URL
